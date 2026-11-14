@@ -695,6 +695,111 @@ func TestSnookerCueBallIsWhite(t *testing.T) {
 	}
 }
 
+// Детектор сообщает, что тронуло шар (cause в ball_start), а решает сервис:
+// белый, которого двигала только рука, — не удар игрока. Сценарии — раскладка
+// на тренировке 19 июня 2026: помощник катит белый ладонью, а затем толкает его
+// кием одной рукой; плюс удар, открытый по белому, и осторожность при неизвестной
+// причине.
+func TestSnookerHandMovedWhiteIsNotAShot(t *testing.T) {
+	st := testdb.New(t)
+	ctx := context.Background()
+	p := newProcessor(st, true)
+
+	mustIngest(t, p, ingest.Request{Stream: "t1", Events: parse(t,
+		snookerStart("2026-06-19T14:48:12Z"),
+		// Удар 1: удар открыт по чёрному; белый покатили ладонью, он толкнул
+		// розовый и отскочил (отскок своей причины не добавляет) — не удар.
+		`{"t":18.23,"frame":455,"type":"shot_start","shot":1}`,
+		`{"t":18.23,"frame":455,"type":"cue_strike","ball":"black","x":0.9,"y":0.5,"speed":0.166,"source":"ball_motion"}`,
+		`{"t":18.23,"frame":455,"type":"ball_start","ball":"black","speed":0.166,"source":"detection","cause":"unknown"}`,
+		`{"t":22.77,"frame":569,"type":"ball_start","ball":"white","x":0.71,"y":0.39,"speed":0.149,"source":"detection","cause":"hand"}`,
+		`{"t":22.80,"frame":570,"type":"ball_collision","balls":["white","pink"],"x":0.72,"y":0.37}`,
+		`{"t":22.81,"frame":570,"type":"ball_start","ball":"pink","speed":0.129,"source":"detection","cause":"ball","cause_ball":"white"}`,
+		`{"t":23.20,"frame":580,"type":"ball_start","ball":"white","x":0.73,"y":0.40,"speed":0.12,"source":"detection","cause":"unknown"}`,
+		`{"t":25.33,"frame":633,"type":"ball_stop","ball":"white","x":0.98,"y":0.61}`,
+		`{"t":32.14,"frame":803,"type":"shot_end","shot":1,"duration":13.91,"contacts":["white-pink"],"cushions":0}`,
+		// Удар 2: тот же удар раскладки, но после ладони белый толкнули кием —
+		// это движение от кия, и удар считается от него: скорость 0.335, касаний нет.
+		`{"t":40.00,"frame":1000,"type":"shot_start","shot":2}`,
+		`{"t":40.00,"frame":1000,"type":"cue_strike","ball":"black","x":0.9,"y":0.5,"speed":0.17,"source":"ball_motion"}`,
+		`{"t":42.77,"frame":1069,"type":"ball_start","ball":"white","x":0.71,"y":0.39,"speed":0.149,"source":"detection","cause":"hand"}`,
+		`{"t":42.80,"frame":1070,"type":"ball_collision","balls":["white","pink"],"x":0.72,"y":0.37}`,
+		`{"t":45.33,"frame":1133,"type":"ball_stop","ball":"white","x":0.98,"y":0.61}`,
+		`{"t":46.61,"frame":1165,"type":"ball_start","ball":"white","x":0.94,"y":0.61,"speed":0.335,"source":"detection","cause":"cue"}`,
+		`{"t":47.51,"frame":1187,"type":"cushion_hit","ball":"white","cushion":"top"}`,
+		`{"t":51.06,"frame":1276,"type":"ball_stop","ball":"white","x":0.19,"y":0.52}`,
+		`{"t":52.14,"frame":1303,"type":"shot_end","shot":2,"duration":12.14,"contacts":["white-pink","white-cushion:top"],"cushions":1}`,
+		// Удар 3: детектор открыл удар по белому, белый двигала только рука.
+		`{"t":60.00,"frame":1500,"type":"shot_start","shot":3}`,
+		`{"t":60.00,"frame":1500,"type":"cue_strike","ball":"white","x":0.3,"y":0.5,"speed":0.2,"source":"ball_motion"}`,
+		`{"t":60.00,"frame":1500,"type":"ball_start","ball":"white","x":0.3,"y":0.5,"speed":0.2,"source":"detection","cause":"hand"}`,
+		`{"t":62.00,"frame":1550,"type":"shot_end","shot":3,"duration":2.0,"cushions":0}`,
+		// Удар 4: рука названа, но у белого видели кий (cue_strike от кия) —
+		// улика удара есть, и удар не отвергается.
+		`{"t":70.00,"frame":1750,"type":"shot_start","shot":4}`,
+		`{"t":70.00,"frame":1750,"type":"cue_strike","ball":"white","x":0.3,"y":0.5,"direction":10.0,"speed":0.25,"source":"cue","cue_direction":10.0,"cue_speed":0.1}`,
+		`{"t":70.00,"frame":1750,"type":"ball_start","ball":"white","x":0.3,"y":0.5,"speed":0.25,"source":"cue","cause":"hand"}`,
+		`{"t":72.00,"frame":1800,"type":"shot_end","shot":4,"duration":2.0,"cushions":0}`,
+		// Удар 5: удар открыт по красному помощника, причина старта белого
+		// неизвестна (кия не видели) — сомнение трактуется в пользу удара.
+		`{"t":80.00,"frame":2000,"type":"shot_start","shot":5}`,
+		`{"t":80.00,"frame":2000,"type":"cue_strike","ball":"red","x":0.9,"y":0.4,"speed":0.12,"source":"ball_motion"}`,
+		`{"t":80.50,"frame":2012,"type":"ball_start","ball":"white","x":0.21,"y":0.51,"speed":0.8,"source":"detection","cause":"unknown"}`,
+		`{"t":81.40,"frame":2035,"type":"ball_collision","balls":["white","red_05"],"x":0.9,"y":0.8}`,
+		`{"t":85.00,"frame":2125,"type":"shot_end","shot":5,"duration":5.0,"first_contact":"red","contacts":["white-red_05"],"cushions":0}`,
+		// Удар 6: открыт по белому от руки (игрок поправил биток), затем белый
+		// остановился и ушёл от кия — биток считается от второго старта.
+		`{"t":90.00,"frame":2250,"type":"shot_start","shot":6}`,
+		`{"t":90.00,"frame":2250,"type":"cue_strike","ball":"white","x":0.25,"y":0.5,"speed":0.3,"source":"ball_motion"}`,
+		`{"t":90.00,"frame":2250,"type":"ball_start","ball":"white","x":0.25,"y":0.5,"speed":0.3,"source":"detection","cause":"hand"}`,
+		`{"t":90.60,"frame":2265,"type":"ball_stop","ball":"white","x":0.21,"y":0.51}`,
+		`{"t":91.00,"frame":2275,"type":"ball_start","ball":"white","x":0.21,"y":0.51,"speed":0.9,"source":"detection","cause":"cue"}`,
+		`{"t":91.80,"frame":2295,"type":"ball_collision","balls":["white","red_05"],"x":0.9,"y":0.8}`,
+		`{"t":92.10,"frame":2302,"type":"ball_pocketed","ball":"red_05","pocket":"br","entry_speed":0.4}`,
+		`{"t":95.00,"frame":2375,"type":"shot_end","shot":6,"duration":5.0,"first_contact":"red_05","contacts":["white-red_05"],"pocketed":["red_05"],"cushions":0}`,
+	)})
+
+	sess := onlySession(t, st, "t1")
+	shots, err := st.ListSessionShots(ctx, sess.ID, store.Page{Limit: 10})
+	if err != nil || len(shots) != 6 {
+		t.Fatalf("удары: %d %v", len(shots), err)
+	}
+	byNo := map[int]store.Shot{}
+	for _, s := range shots {
+		byNo[s.ShotNo] = s
+	}
+	for _, no := range []int{1, 3} {
+		s := byNo[no]
+		if s.Status != "rejected" || s.RejectReason == nil || !strings.Contains(*s.RejectReason, "рука") || s.Outcome != nil {
+			t.Errorf("удар %d: белый двигала только рука, ожидался rejected: %+v", no, s)
+		}
+	}
+	if s := byNo[2]; s.Status != "closed" || *s.CueBall != "white" || *s.CueSpeed != 0.335 ||
+		*s.CueX != 0.94 || s.FirstContact != nil || *s.Outcome != ingest.OutcomeNoContact {
+		t.Errorf("удар 2: белый ушёл от кия после ладони: %+v", s)
+	}
+	if s := byNo[4]; s.Status != "closed" || *s.Outcome != ingest.OutcomeNoContact || *s.CueSource != "cue" {
+		t.Errorf("удар 4: кий у белого видели: %+v", s)
+	}
+	if s := byNo[5]; s.Status != "closed" || *s.CueBall != "white" || *s.CueSpeed != 0.8 ||
+		*s.FirstContact != "red_05" || *s.Outcome != ingest.OutcomeMiss {
+		t.Errorf("удар 5: причина неизвестна, удар остаётся: %+v", s)
+	}
+	if s := byNo[6]; s.Status != "closed" || *s.CueSpeed != 0.9 || *s.CueX != 0.21 ||
+		*s.FirstContact != "red_05" || *s.Outcome != ingest.OutcomePot {
+		t.Errorf("удар 6: биток от удара кием, а не от поправки рукой: %+v", s)
+	}
+
+	stats, err := st.Stats(ctx, store.SessionScope(sess.ID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.Shots != 4 || stats.Pots != 1 || stats.Misses != 1 || stats.NoContact != 2 {
+		t.Errorf("исходы: shots=%d pots=%d misses=%d no_contact=%d",
+			stats.Shots, stats.Pots, stats.Misses, stats.NoContact)
+	}
+}
+
 // Без game: snooker детектору верят: в пирамиде битком бывает любой шар.
 func TestCueBallTrustedOutsideSnooker(t *testing.T) {
 	st := testdb.New(t)
