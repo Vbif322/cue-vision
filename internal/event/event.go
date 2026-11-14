@@ -38,6 +38,19 @@ const (
 
 const deliveryImmediate = "immediate"
 
+// Причины старта шара — поле cause в ball_start (EVENTS.md §4.2): что тронуло шар.
+// Это наблюдение детектора, а не вывод об игре; детекторы без этого поля дают
+// пустую строку, и она значит то же, что CauseUnknown.
+const (
+	CauseCue     = "cue"
+	CauseHand    = "hand"
+	CauseBall    = "ball"
+	CauseUnknown = "unknown"
+)
+
+// Источник cue_strike: вектор удара снят с наблюдения самого кия.
+const StrikeSourceCue = "cue"
+
 // MaxLineBytes — предел длины одной строки JSONL. Самое крупное событие потока —
 // positions на 22 шара — занимает единицы килобайт.
 const MaxLineBytes = 4 << 20

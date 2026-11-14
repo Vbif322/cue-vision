@@ -646,24 +646,39 @@ func (r *run) onShotEnd(ctx context.Context, ev event.Event, eventID int64) erro
 		miss = *d.NearMiss
 	}
 
-	// Детектор открыл удар по цветному шару, а биток в снукере — белый. Если белый
-	// так и не тронулся, это не удар игрока; если тронулся — удар пересчитывается
-	// от белого, а геометрия и близкий промах детектора, посчитанные от чужого
-	// битка, отбрасываются.
-	if shot.cueBall != "" && facts.CueBall == "" && s.game == GameSnooker && !synthesized {
+	// В снукере биток — белый, и удар игрока — это белый, тронутый не рукой.
+	//
+	// Детектор открыл удар по цветному шару: если белый так и не тронулся или его
+	// двигала только рука, это не удар игрока; если белый ушёл от кия (или причина
+	// неизвестна) — удар пересчитывается от белого, а геометрия и близкий промах
+	// детектора, посчитанные от чужого битка, отбрасываются.
+	//
+	// Детектор открыл удар по белому: удар отвергается, если белый двигала только
+	// рука. Если первым был старт от руки, а потом белый ушёл от кия, биток
+	// пересчитывается от этого второго старта.
+	if shot.cueBall != "" && s.game == GameSnooker && !synthesized {
 		white, err := r.findWhiteMotion(ctx, shot.id)
 		if err != nil {
 			return err
 		}
-		if white == nil {
+		byColour := facts.CueBall == ""
+		switch {
+		case byColour && white == nil:
 			return r.rejectShot(ctx, shot.id, ev.T, duration, d,
 				"биток не двигался: удар открыт по "+shot.cueBall)
+		case white != nil && white.HandOnly:
+			reason := "биток двигала только рука"
+			if byColour {
+				reason += ": удар открыт по " + shot.cueBall
+			}
+			return r.rejectShot(ctx, shot.id, ev.T, duration, d, reason)
+		case byColour || (white != nil && white.HandFirst && white.Speed != nil):
+			if err := r.reassignCueBall(ctx, shot.id, white); err != nil {
+				return err
+			}
+			facts.CueBall, facts.FirstContact = white.Ball, white.FirstContact
+			geo, miss = event.Geometry{}, event.NearMiss{}
 		}
-		if err := r.reassignCueBall(ctx, shot.id, white); err != nil {
-			return err
-		}
-		facts.CueBall, facts.FirstContact = white.Ball, white.FirstContact
-		geo, miss = event.Geometry{}, event.NearMiss{}
 	}
 	if d.DeclaredTarget != nil {
 		facts.TargetBall, facts.TargetPocket = d.DeclaredTarget.Ball, d.DeclaredTarget.Pocket
