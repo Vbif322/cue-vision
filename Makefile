@@ -1,7 +1,7 @@
 TEST_DB_PORT ?= 55432
 TEST_DATABASE_URL ?= postgres://cuevision:cuevision@127.0.0.1:$(TEST_DB_PORT)/cuevision?sslmode=disable
 
-.PHONY: build run fmt vet test test-db test-db-down up down
+.PHONY: build run fmt vet test test-db test-db-down up down web-install web-dev web-lint web-check
 
 build:
 	CGO_ENABLED=0 go build -trimpath -o bin/cue-vision ./cmd/cue-vision
@@ -33,3 +33,16 @@ up:
 
 down:
 	docker compose down
+
+# Фронтенды (web/, npm workspaces).
+web-install:
+	cd web && npm install
+
+web-dev:
+	cd web && npm run dev
+
+web-lint:
+	cd web && npm run lint
+
+web-check:
+	cd web && npm run lint && npm run typecheck && npm run build

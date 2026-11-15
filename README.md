@@ -246,6 +246,7 @@ make test-db-down
 | `internal/store` | PostgreSQL: миграции, тренировки, игроки, статистика |
 | `internal/detector` | WebSocket-клиент детектора и обратный канал команд |
 | `internal/api` | HTTP |
+| `web/` | фронтенды: `apps/training` — тренировки (Vue + Vite), см. `web/README.md` |
 
 ## Чего здесь нет
 
