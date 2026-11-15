@@ -4,6 +4,8 @@ import type { List, NewTraining, Shot, Training, TrainingPatch, TrainingStats, T
 export interface TrainingFilter {
   stream?: string
   player_id?: number
+  /** Тренировки, куда попали удары сессии, и её автоматическая. */
+  session_id?: number
   status?: TrainingStatus
   limit?: number
   offset?: number

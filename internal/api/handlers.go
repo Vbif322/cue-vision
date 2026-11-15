@@ -253,6 +253,10 @@ func (s *Server) listTrainings(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	sessionID, err := queryInt(r, "session_id", 0, 1, 1<<62)
+	if err != nil {
+		return err
+	}
 	status := q.Get("status")
 	switch status {
 	case "", "active", "finished":
@@ -260,7 +264,7 @@ func (s *Server) listTrainings(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("параметр status: active или finished")
 	}
 	items, err := s.store.ListTrainings(r.Context(), store.TrainingFilter{
-		Stream: stream, PlayerID: playerID, Status: status, Page: page,
+		Stream: stream, PlayerID: playerID, SessionID: sessionID, Status: status, Page: page,
 	})
 	if err != nil {
 		return err

@@ -22,6 +22,7 @@ async function logout() {
     <template v-if="user && !route.meta.public">
       <nav class="app-header__nav">
         <RouterLink :to="{ name: 'trainings' }">Тренировки</RouterLink>
+        <RouterLink :to="{ name: 'upload' }">Загрузить файл</RouterLink>
         <RouterLink v-if="isAdmin" :to="{ name: 'users' }">Пользователи</RouterLink>
       </nav>
       <div class="app-header__user">

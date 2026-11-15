@@ -206,7 +206,7 @@ curl -b cookies -X POST http://localhost:8080/api/v1/users -d '{"login":"marker"
 | `GET /sessions/{id}/events?type=&after_id=&limit=` | сырые события в порядке приёма |
 | `POST /sessions/{id}/close` | закрыть сессию, оставшуюся без `session_end` |
 | `POST /trainings` | открыть тренировку: `stream`, `player_id`, `title`, `exercise`, `notes`, `started_at` |
-| `GET /trainings?stream=&player_id=&status=` | тренировки |
+| `GET /trainings?stream=&player_id=&session_id=&status=` | тренировки; `session_id` — те, куда попали удары сессии, и её автоматическая |
 | `GET /trainings/{id}` | тренировка |
 | `PATCH /trainings/{id}` | изменить `player_id`, `title`, `exercise`, `notes`; `null` очищает поле |
 | `POST /trainings/{id}/finish` | закрыть тренировку; необязательное `ended_at` |

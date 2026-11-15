@@ -156,6 +156,28 @@ export interface Shot {
   conf?: number
 }
 
+// --- приём событий (internal/ingest/processor.go, internal/event/event.go) ---
+
+export interface LineError {
+  /** Номер строки файла, с 1. */
+  line: number
+  error: string
+}
+
+/** Итог POST /events. received = stored + duplicates + skipped + invalid. */
+export interface IngestResult {
+  received: number
+  stored: number
+  duplicates: number
+  /** Не сохраняются по настройке сервиса (SKIP_EVENT_TYPES, обычно positions). */
+  skipped: number
+  invalid: number
+  /** Сессии детектора, которых коснулась загрузка. */
+  sessions: number[]
+  /** Первые отвергнутые строки; полный счёт — в invalid. */
+  errors?: LineError[]
+}
+
 // --- пользователи и вход (internal/store/users.go, internal/api/auth.go) ---
 
 export type Role = 'admin' | 'staff'

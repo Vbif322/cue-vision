@@ -23,6 +23,7 @@ export const router = createRouter({
       component: () => import('@/views/TrainingView.vue'),
       props: (route) => ({ id: Number(route.params.id) }),
     },
+    { path: '/upload', name: 'upload', component: () => import('@/views/UploadView.vue') },
     { path: '/account', name: 'account', component: () => import('@/views/AccountView.vue') },
     { path: '/users', name: 'users', component: () => import('@/views/UsersView.vue'), meta: { admin: true } },
     { path: '/:pathMatch(.*)*', name: 'not-found', component: () => import('@/views/NotFoundView.vue') },

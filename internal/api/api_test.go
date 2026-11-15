@@ -230,6 +230,17 @@ func TestUploadAndStats(t *testing.T) {
 		t.Fatalf("тренировки: %+v", trainings.Items)
 	}
 	tid := itoa(trainings.Items[0].ID)
+	var bySession struct {
+		Items []idOnly `json:"items"`
+	}
+	c.expect(http.StatusOK, "GET", "/api/v1/trainings?session_id="+sid, nil, &bySession)
+	if len(bySession.Items) != 1 || itoa(bySession.Items[0].ID) != tid {
+		t.Fatalf("тренировки сессии: %+v", bySession.Items)
+	}
+	c.expect(http.StatusOK, "GET", "/api/v1/trainings?session_id="+itoa(sessions.Items[0].ID+1000), nil, &bySession)
+	if len(bySession.Items) != 0 {
+		t.Fatalf("тренировки чужой сессии: %+v", bySession.Items)
+	}
 	var patched struct {
 		PlayerName string `json:"player_name"`
 		Title      string `json:"title"`

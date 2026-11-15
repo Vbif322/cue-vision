@@ -55,6 +55,9 @@ type TrainingFilter struct {
 	Stream   string
 	PlayerID int64
 	Status   string // active | finished
+	// SessionID — тренировки, в которые попали удары сессии, и автоматическая
+	// тренировка сессии (у неё может ещё не быть ударов).
+	SessionID int64
 	Page
 }
 
@@ -71,6 +74,12 @@ func (s *Store) ListTrainings(ctx context.Context, f TrainingFilter) ([]Training
 	if f.PlayerID != 0 {
 		args = append(args, f.PlayerID)
 		conds = append(conds, fmt.Sprintf("t.player_id = $%d", len(args)))
+	}
+	if f.SessionID != 0 {
+		args = append(args, f.SessionID)
+		n := len(args)
+		conds = append(conds, fmt.Sprintf(
+			"(t.session_id = $%d OR EXISTS (SELECT 1 FROM shots sh WHERE sh.training_id = t.id AND sh.session_id = $%d))", n, n))
 	}
 	switch f.Status {
 	case "active":

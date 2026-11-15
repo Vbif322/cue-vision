@@ -24,7 +24,11 @@ export type Query = Record<string, string | number | boolean | null | undefined>
 
 export interface RequestOptions {
   query?: Query
+  /** Тело как JSON. */
   body?: unknown
+  /** Тело как есть (файл) — вместо body; заголовки к нему — в headers. */
+  raw?: BodyInit
+  headers?: Record<string, string>
   signal?: AbortSignal
 }
 
@@ -38,15 +42,24 @@ function buildUrl(path: string, query?: Query): string {
 }
 
 export async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
-  const init: RequestInit = { method, signal: opts.signal, headers: { Accept: 'application/json' } }
-  if (opts.body !== undefined) {
-    init.headers = { ...init.headers, 'Content-Type': 'application/json' }
+  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers }
+  const init: RequestInit = { method, signal: opts.signal, headers }
+  if (opts.raw !== undefined) {
+    init.body = opts.raw
+  } else if (opts.body !== undefined) {
+    headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(opts.body)
   }
 
   const res = await fetch(buildUrl(path, opts.query), init)
   const text = await res.text()
-  const data: unknown = text ? JSON.parse(text) : undefined
+  let data: unknown
+  try {
+    data = text ? JSON.parse(text) : undefined
+  } catch {
+    // Не JSON — например, страница ошибки прокси (413 от nginx).
+    if (res.ok) throw new ApiError(res.status, 'ответ сервера не разобран')
+  }
 
   if (!res.ok) {
     if (res.status === 401 && !path.startsWith('/auth/')) onUnauthorized?.()
