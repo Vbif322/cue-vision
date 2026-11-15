@@ -1,0 +1,6 @@
+# Образец /etc/nginx/snippets/cue-vision-host.conf (см. deploy/nginx/cue-vision.conf).
+# Подставьте свой домен; копию в git не добавляйте.
+
+server_name cv.example.com;
+ssl_certificate     /etc/letsencrypt/live/cv.example.com/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/cv.example.com/privkey.pem;

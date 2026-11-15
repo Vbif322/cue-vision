@@ -1,0 +1,3 @@
+# Ежедневный дамп базы cue-vision, хранится 14 дней. Ставится в /etc/cron.d/cue-vision-backup.
+# Каталог: sudo install -d -m 700 -o postgres -g postgres /var/backups/cue-vision
+15 3 * * * postgres pg_dump -Fc cuevision > /var/backups/cue-vision/cuevision-$(date +\%F).dump && find /var/backups/cue-vision -name 'cuevision-*.dump' -mtime +14 -delete

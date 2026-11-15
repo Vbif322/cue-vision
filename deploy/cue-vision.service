@@ -1,0 +1,46 @@
+# systemd-юнит cue-vision. Ставится в /etc/systemd/system/cue-vision.service.
+# Бинарник — /opt/cue-vision/bin/cue-vision, настройки — /etc/cue-vision/env.
+# База — PostgreSQL на этой же машине, вход по Unix-сокету через peer: роль
+# "cue-vision" совпадает с пользователем ОС, пароля нет.
+
+[Unit]
+Description=cue-vision: приём событий детектора и статистика тренировок
+After=network-online.target postgresql-18.service
+Wants=network-online.target
+Requires=postgresql-18.service
+
+[Service]
+Type=exec
+User=cue-vision
+Group=cue-vision
+EnvironmentFile=/etc/cue-vision/env
+ExecStart=/opt/cue-vision/bin/cue-vision
+Restart=on-failure
+RestartSec=3
+# Сервис по SIGTERM дожидается запросов до 15 с.
+TimeoutStopSec=20
+
+# Сервису не нужно ничего писать на диск: всё состояние — в PostgreSQL.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
