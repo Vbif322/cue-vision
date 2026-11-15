@@ -1,5 +1,5 @@
 // Типы ответов cue-vision. Источник правды — структуры в internal/store
-// (trainings.go, shots.go, stats.go, players.go); при смене API править здесь.
+// (trainings.go, shots.go, stats.go, players.go, users.go); при смене API править здесь.
 // Время — строка RFC 3339 в UTC, расстояния и скорости — в нормированных единицах стола.
 
 export interface List<T> {
@@ -154,4 +154,33 @@ export interface Shot {
   outcome?: Outcome
   success?: boolean
   conf?: number
+}
+
+// --- пользователи и вход (internal/store/users.go, internal/api/auth.go) ---
+
+export type Role = 'admin' | 'staff'
+
+export interface User {
+  id: number
+  login: string
+  role: Role
+  created_at: string
+  updated_at: string
+}
+
+export interface Me {
+  /** null при входе по API_TOKEN */
+  user: User | null
+  via: 'session' | 'token'
+}
+
+export interface NewUser {
+  login: string
+  password: string
+  role: Role
+}
+
+export interface UserPatch {
+  role?: Role
+  password?: string
 }

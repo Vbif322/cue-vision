@@ -78,3 +78,75 @@ th {
 .error {
   color: var(--danger);
 }
+
+input,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input,
+select {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+button {
+  padding: 6px 14px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--surface);
+  background: var(--accent);
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+button.secondary {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+button.danger {
+  color: var(--danger);
+  border-color: var(--border);
+  background: var(--surface);
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  color: var(--text-muted);
+  background: none;
+}
+
+.link-button:hover {
+  color: var(--accent);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+  max-width: 360px;
+}
+
+.field {
+  display: grid;
+  gap: 4px;
+}
+
+.field > span {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.success {
+  color: var(--accent);
+}

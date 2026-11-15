@@ -15,6 +15,7 @@ import (
 	_ "time/tzdata" // часовые пояса для разбивки статистики по дням в образе без tzdata
 
 	"github.com/Vbif322/cue-vision/internal/api"
+	"github.com/Vbif322/cue-vision/internal/auth"
 	"github.com/Vbif322/cue-vision/internal/config"
 	"github.com/Vbif322/cue-vision/internal/detector"
 	"github.com/Vbif322/cue-vision/internal/ingest"
@@ -45,6 +46,9 @@ func run() error {
 	defer st.Close()
 	if err := st.Migrate(ctx); err != nil {
 		return fmt.Errorf("миграции: %w", err)
+	}
+	if err := bootstrapAdmin(ctx, st, cfg, log); err != nil {
+		return fmt.Errorf("первый администратор: %w", err)
 	}
 
 	processor := ingest.New(st.Pool(), ingest.Options{
@@ -86,6 +90,39 @@ func run() error {
 	wg.Wait()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
+	}
+	return nil
+}
+
+// bootstrapAdmin заводит администратора из ADMIN_LOGIN и ADMIN_PASSWORD, пока в базе
+// нет ни одного пользователя. Дальше пароль из настроек не действует: его меняют через API.
+func bootstrapAdmin(ctx context.Context, st *store.Store, cfg config.Config, log *slog.Logger) error {
+	if cfg.AdminLogin != "" {
+		login := auth.NormalizeLogin(cfg.AdminLogin)
+		if !auth.ValidLogin(login) {
+			return fmt.Errorf("ADMIN_LOGIN: %s", auth.LoginRule)
+		}
+		if err := auth.CheckPassword(cfg.AdminPassword); err != nil {
+			return fmt.Errorf("ADMIN_PASSWORD: %w", err)
+		}
+		hash, err := auth.HashPassword(cfg.AdminPassword)
+		if err != nil {
+			return err
+		}
+		created, err := st.BootstrapAdmin(ctx, login, hash)
+		if err != nil {
+			return err
+		}
+		if created {
+			log.Info("заведён первый администратор", "login", login)
+		}
+	}
+	n, err := st.CountUsers(ctx)
+	if err != nil {
+		return err
+	}
+	if n == 0 && cfg.APIToken == "" {
+		log.Warn("пользователей нет и API_TOKEN не задан: в API никто не войдёт; задайте ADMIN_LOGIN и ADMIN_PASSWORD")
 	}
 	return nil
 }

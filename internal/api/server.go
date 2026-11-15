@@ -2,7 +2,6 @@
 package api
 
 import (
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +9,9 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
+	"github.com/Vbif322/cue-vision/internal/auth"
 	"github.com/Vbif322/cue-vision/internal/config"
 	"github.com/Vbif322/cue-vision/internal/detector"
 	"github.com/Vbif322/cue-vision/internal/ingest"
@@ -26,17 +25,37 @@ type Server struct {
 	processor *ingest.Processor
 	detectors *detector.Manager
 	log       *slog.Logger
+
+	loginLimiter *auth.Limiter
 }
 
 // New создаёт сервер.
 func New(cfg config.Config, st *store.Store, processor *ingest.Processor, detectors *detector.Manager, log *slog.Logger) *Server {
-	return &Server{cfg: cfg, store: st, processor: processor, detectors: detectors, log: log}
+	return &Server{
+		cfg: cfg, store: st, processor: processor, detectors: detectors, log: log,
+		loginLimiter: auth.NewLimiter(loginMaxFailures, loginWindow),
+	}
 }
 
 // Handler собирает маршруты.
 func (s *Server) Handler() http.Handler {
 	api := http.NewServeMux()
-	route := func(pattern string, fn handlerFunc) { api.Handle(pattern, s.wrap(fn)) }
+	handle := func(level access, pattern string, fn handlerFunc) {
+		api.Handle(pattern, s.wrap(s.guard(level, fn)))
+	}
+	route := func(pattern string, fn handlerFunc) { handle(accessUser, pattern, fn) }
+	admin := func(pattern string, fn handlerFunc) { handle(accessAdmin, pattern, fn) }
+
+	handle(accessPublic, "POST /api/v1/auth/login", s.login)
+	handle(accessPublic, "POST /api/v1/auth/logout", s.logout)
+	route("GET /api/v1/auth/me", s.me)
+	route("POST /api/v1/auth/password", s.changePassword)
+
+	admin("GET /api/v1/users", s.listUsers)
+	admin("POST /api/v1/users", s.createUser)
+	admin("GET /api/v1/users/{id}", s.getUser)
+	admin("PATCH /api/v1/users/{id}", s.updateUser)
+	admin("DELETE /api/v1/users/{id}", s.deleteUser)
 
 	route("POST /api/v1/events", s.ingestEvents)
 
@@ -76,7 +95,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
-	mux.Handle("/api/", s.auth(api))
+	mux.Handle("/api/", s.crossOrigin(api))
 	return s.logging(mux)
 }
 
@@ -124,22 +143,6 @@ func (s *Server) wrap(fn handlerFunc) http.Handler {
 			s.log.Error("запрос завершился ошибкой", "method", r.Method, "path", r.URL.Path, "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "внутренняя ошибка"})
 		}
-	})
-}
-
-func (s *Server) auth(next http.Handler) http.Handler {
-	if s.cfg.APIToken == "" {
-		return next
-	}
-	want := []byte(s.cfg.APIToken)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if !ok || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
-			w.Header().Set("WWW-Authenticate", "Bearer")
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "нужен заголовок Authorization: Bearer <токен>"})
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
 }
 

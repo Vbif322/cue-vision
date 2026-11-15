@@ -27,13 +27,20 @@ type client struct {
 	t     *testing.T
 	base  string
 	token string
+	hc    *http.Client // nil — http.DefaultClient
 }
+
+// testToken — API_TOKEN тестового сервера: без входа API закрыт.
+const testToken = "test-token"
 
 func newServer(t *testing.T, token string) *client {
 	t.Helper()
+	if token == "" {
+		token = testToken
+	}
 	st := testdb.New(t)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	cfg := config.Config{APIToken: token, MaxBodyBytes: 1 << 20}
+	cfg := config.Config{APIToken: token, MaxBodyBytes: 1 << 20, SessionTTL: time.Hour}
 	processor := ingest.New(st.Pool(), ingest.Options{
 		AutoTraining: true,
 		SkipTypes:    map[string]bool{event.Positions: true},
@@ -71,7 +78,11 @@ func (c *client) do(method, path string, body any, headers map[string]string, ou
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	hc := c.hc
+	if hc == nil {
+		hc = http.DefaultClient
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		c.t.Fatal(err)
 	}
@@ -80,7 +91,7 @@ func (c *client) do(method, path string, body any, headers map[string]string, ou
 	if err != nil {
 		c.t.Fatal(err)
 	}
-	if out != nil {
+	if out != nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, out); err != nil {
 			c.t.Fatalf("%s %s: ответ %d не разобран: %v\n%s", method, path, resp.StatusCode, err, raw)
 		}
@@ -95,7 +106,7 @@ func (c *client) expect(want int, method, path string, body any, out any) {
 	if got != want {
 		c.t.Fatalf("%s %s: код %d, ожидался %d\n%s", method, path, got, want, raw)
 	}
-	if out != nil {
+	if out != nil && len(raw) > 0 {
 		if err := json.Unmarshal(raw, out); err != nil {
 			c.t.Fatalf("%s %s: %v\n%s", method, path, err, raw)
 		}

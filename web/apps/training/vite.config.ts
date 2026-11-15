@@ -3,12 +3,11 @@ import { fileURLToPath, URL } from 'node:url'
 import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 
-// В разработке фронт ходит в cue-vision через прокси: у сервера нет CORS, а токен
-// API (CUEVISION_API_TOKEN) подставляет прокси и в браузер он не попадает.
+// В разработке фронт ходит в cue-vision через прокси: у сервера нет CORS, а cookie
+// сессии после входа остаётся на адресе dev-сервера, как и в рабочей сборке.
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const target = env.CUEVISION_API_URL || 'http://localhost:8080'
-  const token = env.CUEVISION_API_TOKEN
 
   return {
     plugins: [vue()],
@@ -21,7 +20,6 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target,
           changeOrigin: true,
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         },
       },
     },

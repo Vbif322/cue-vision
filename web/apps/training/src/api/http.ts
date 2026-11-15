@@ -13,6 +13,13 @@ export class ApiError extends Error {
   }
 }
 
+// Вызывается на 401 от любого запроса, кроме /auth/*: сессия истекла или её закрыли.
+let onUnauthorized: (() => void) | undefined
+
+export function setUnauthorizedHandler(handler: () => void) {
+  onUnauthorized = handler
+}
+
 export type Query = Record<string, string | number | boolean | null | undefined>
 
 export interface RequestOptions {
@@ -42,6 +49,7 @@ export async function request<T>(method: string, path: string, opts: RequestOpti
   const data: unknown = text ? JSON.parse(text) : undefined
 
   if (!res.ok) {
+    if (res.status === 401 && !path.startsWith('/auth/')) onUnauthorized?.()
     const message =
       data && typeof data === 'object' && 'error' in data && typeof data.error === 'string'
         ? data.error
@@ -55,4 +63,5 @@ export const http = {
   get: <T>(path: string, query?: Query, signal?: AbortSignal) => request<T>('GET', path, { query, signal }),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
   patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
+  delete: <T>(path: string) => request<T>('DELETE', path),
 }

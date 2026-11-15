@@ -1,17 +1,22 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadDefaults(t *testing.T) {
 	for _, key := range []string{"HTTP_ADDR", "DATABASE_URL", "API_TOKEN", "DETECTORS", "AUTO_TRAINING",
-		"SKIP_EVENT_TYPES", "MAX_BODY_BYTES", "DETECTOR_IDLE_TIMEOUT", "LOG_LEVEL"} {
+		"SKIP_EVENT_TYPES", "MAX_BODY_BYTES", "DETECTOR_IDLE_TIMEOUT", "LOG_LEVEL",
+		"ADMIN_LOGIN", "ADMIN_PASSWORD", "SESSION_TTL", "COOKIE_SECURE"} {
 		t.Setenv(key, "")
 	}
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.HTTPAddr != ":8080" || !cfg.AutoTraining || !cfg.SkipTypes["positions"] || len(cfg.Detectors) != 0 {
+	if cfg.HTTPAddr != ":8080" || !cfg.AutoTraining || !cfg.SkipTypes["positions"] || len(cfg.Detectors) != 0 ||
+		cfg.SessionTTL != 30*24*time.Hour || cfg.CookieSecure {
 		t.Fatalf("значения по умолчанию: %+v", cfg)
 	}
 }
@@ -40,6 +45,10 @@ func TestLoadRejects(t *testing.T) {
 		"не булево значение":   {"AUTO_TRAINING", "maybe"},
 		"неизвестный уровень":  {"LOG_LEVEL", "loud"},
 		"отрицательный предел": {"MAX_BODY_BYTES", "-1"},
+		"логин без пароля":     {"ADMIN_LOGIN", "admin"},
+		"пароль без логина":    {"ADMIN_PASSWORD", "secret-password"},
+		"короткая сессия":      {"SESSION_TTL", "10s"},
+		"cookie не булево":     {"COOKIE_SECURE", "sometimes"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(env[0], env[1])

@@ -11,17 +11,19 @@
 ## Быстрый старт
 
 ```
-docker compose up -d --build
+ADMIN_LOGIN=admin ADMIN_PASSWORD='пароль-администратора' API_TOKEN=$(openssl rand -hex 24) \
+  docker compose up -d --build
 ```
 
 Сервис слушает `:8080`, база — `127.0.0.1:5433`. Миграции применяются при старте.
-
-Загрузить запись детектора и посмотреть статистику:
+API закрыт: люди входят логином и паролем, детекторы и скрипты — токеном
+(см. «Доступ»). Для примеров ниже токен положен в переменную:
 
 ```
-curl -X POST 'http://localhost:8080/api/v1/events?stream=club1-t1' --data-binary @testdata/session_100s.jsonl
-curl 'http://localhost:8080/api/v1/trainings?stream=club1-t1'
-curl 'http://localhost:8080/api/v1/trainings/1/stats'
+export AUTH="Authorization: Bearer $API_TOKEN"
+curl -H "$AUTH" -X POST 'http://localhost:8080/api/v1/events?stream=club1-t1' --data-binary @testdata/session_100s.jsonl
+curl -H "$AUTH" 'http://localhost:8080/api/v1/trainings?stream=club1-t1'
+curl -H "$AUTH" 'http://localhost:8080/api/v1/trainings/1/stats'
 ```
 
 ## Как события попадают в сервис
@@ -54,7 +56,7 @@ curl 'http://localhost:8080/api/v1/trainings/1/stats'
 лузы на удар, режим, перезасев раскладки, перекалибровку.
 
 ```
-curl -X POST http://localhost:8080/api/v1/detectors/club1-t1/commands \
+curl -H "$AUTH" -X POST http://localhost:8080/api/v1/detectors/club1-t1/commands \
      -d '{"cmd":"set_target","ball":"red_03","pocket":"tr"}'
 ```
 
@@ -66,12 +68,12 @@ curl -X POST http://localhost:8080/api/v1/detectors/club1-t1/commands \
 за секунду до конца тренировки, придёт уже после её закрытия — и всё равно в неё попадёт.
 
 ```
-curl -X POST http://localhost:8080/api/v1/players   -d '{"name":"Иван Петров"}'
-curl -X POST http://localhost:8080/api/v1/trainings -d '{"stream":"club1-t1","player_id":1,"title":"Дальние удары"}'
+curl -H "$AUTH" -X POST http://localhost:8080/api/v1/players   -d '{"name":"Иван Петров"}'
+curl -H "$AUTH" -X POST http://localhost:8080/api/v1/trainings -d '{"stream":"club1-t1","player_id":1,"title":"Дальние удары"}'
 # ... игрок тренируется ...
-curl -X POST http://localhost:8080/api/v1/trainings/1/finish
-curl http://localhost:8080/api/v1/trainings/1/stats
-curl 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Moscow'
+curl -H "$AUTH" -X POST http://localhost:8080/api/v1/trainings/1/finish
+curl -H "$AUTH" http://localhost:8080/api/v1/trainings/1/stats
+curl -H "$AUTH" 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Moscow'
 ```
 
 Тренировку можно открыть и закрыть задним числом (`started_at`, `ended_at`): уже принятые
@@ -84,6 +86,40 @@ curl 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Mos
 Поэтому загруженный файл сразу даёт тренировку со статистикой; приписать её игроку можно
 задним числом: `PATCH /api/v1/trainings/{id}` с `{"player_id": 1}`. Автоматические
 тренировки отключаются настройкой `AUTO_TRAINING=false`.
+
+## Доступ
+
+Всё под `/api/v1`, кроме входа и выхода, требует одного из двух:
+
+- **Сессия по логину и паролю** — для людей. `POST /api/v1/auth/login` с
+  `{"login": "...", "password": "..."}` ставит cookie `cv_session` (HttpOnly,
+  SameSite=Lax); дальше браузер приносит её сам. Сессия живёт `SESSION_TTL` и
+  продлевается, пока ею пользуются. `POST /api/v1/auth/logout` её закрывает.
+- **Токен** `Authorization: Bearer <API_TOKEN>` — для детекторов, загрузки файлов и
+  скриптов. Даёт права администратора. Пустой `API_TOKEN` — вход токеном выключен.
+
+Пользователи — персонал клуба, роли две:
+
+| Роль | Может |
+|---|---|
+| `staff` | всё с тренировками, игроками, сессиями, детекторами; сменить свой пароль |
+| `admin` | то же и управлять пользователями (`/users`) |
+
+Первого администратора сервис заводит при старте из `ADMIN_LOGIN` и `ADMIN_PASSWORD`,
+**только если пользователей ещё нет**. Дальше эти переменные ни на что не влияют —
+сменённый пароль перезапуск не откатит; остальных пользователей заводит администратор.
+Последнего администратора нельзя удалить или понизить, себя — нельзя удалить.
+
+Логин — латинские буквы, цифры, точка, дефис, подчёркивание, 2–64 символа, без учёта
+регистра. Пароль — от 8 символов, хранится как PBKDF2-SHA256 (600 000 итераций) с солью.
+Новый пароль закрывает все остальные сессии пользователя. После 10 неудачных входов
+подряд с одного адреса на один логин вход закрывается на 15 минут (ответ 429).
+Изменяющие запросы с чужого сайта (по `Sec-Fetch-Site` / `Origin`) отклоняются с 403.
+
+```
+curl -c cookies -X POST http://localhost:8080/api/v1/auth/login -d '{"login":"admin","password":"..."}'
+curl -b cookies -X POST http://localhost:8080/api/v1/users -d '{"login":"marker","password":"...","role":"staff"}'
+```
 
 ## Статистика
 
@@ -150,10 +186,18 @@ curl 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Mos
 
 Все пути — под `/api/v1`. Ответы — JSON, время — UTC в RFC 3339, списки — `{"items": [...]}`
 с параметрами `limit` и `offset`. Ошибка — `{"error": "..."}` с кодом 4xx или 5xx.
-Если задан `API_TOKEN`, нужен заголовок `Authorization: Bearer <токен>`.
+Нужен вход — cookie сессии или токен (см. «Доступ»); без него — 401, без нужной роли — 403.
 
 | Метод и путь | Назначение |
 |---|---|
+| `POST /auth/login` | вход: `login`, `password`; ставит cookie сессии. Без входа |
+| `POST /auth/logout` | выход: закрыть сессию из cookie. Без входа |
+| `GET /auth/me` | кто вошёл: `{"user": ..., "via": "session"}`; для токена `user` — `null` |
+| `POST /auth/password` | сменить свой пароль: `current_password`, `new_password` |
+| `GET /users`, `GET /users/{id}` | пользователи (admin) |
+| `POST /users` | завести пользователя: `login`, `password`, `role` (`staff` по умолчанию) (admin) |
+| `PATCH /users/{id}` | сменить `role` и/или задать `password` (admin) |
+| `DELETE /users/{id}` | удалить пользователя (admin) |
 | `POST /events?stream=` | принять события; ответ — сколько принято, сколько дублей, какие строки отвергнуты |
 | `GET /sessions?stream=&status=` | сессии детектора |
 | `GET /sessions/{id}` | сессия с калибровкой стола и итогом прогона |
@@ -205,7 +249,7 @@ curl 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Mos
 (`SKIP_EVENT_TYPES`): это 25 событий в секунду, и статистике они не нужны.
 
 Таблицы: `sessions`, `trainings`, `players`, `shots`, `pots` (падения с лузой и скоростью
-входа), `events` (сырой поток). Схема — `internal/store/migrations`.
+входа), `events` (сырой поток), `users` и `auth_sessions` (вход персонала). Схема — `internal/store/migrations`.
 
 ## Настройки
 
@@ -215,7 +259,10 @@ curl 'http://localhost:8080/api/v1/players/1/stats?from=2026-11-01&tz=Europe/Mos
 |---|---|---|
 | `HTTP_ADDR` | `:8080` | адрес HTTP-сервера |
 | `DATABASE_URL` | `postgres://cuevision:cuevision@localhost:5432/cuevision?sslmode=disable` | PostgreSQL |
-| `API_TOKEN` | пусто | токен доступа к `/api/`; пусто — без проверки |
+| `API_TOKEN` | пусто | токен для детекторов и скриптов, права администратора; пусто — вход токеном выключен |
+| `ADMIN_LOGIN`, `ADMIN_PASSWORD` | пусто | первый администратор; заводится, только пока пользователей нет |
+| `SESSION_TTL` | `720h` | срок сессии входа; продлевается, пока ею пользуются |
+| `COOKIE_SECURE` | `false` | cookie сессии только по HTTPS; включить за HTTPS-прокси |
 | `DETECTORS` | пусто | детекторы: `поток=ws://host:port` через запятую |
 | `AUTO_TRAINING` | `true` | собирать удары вне ручных тренировок в автоматические |
 | `SKIP_EVENT_TYPES` | `positions` | типы событий, которые не сохраняются |
@@ -243,7 +290,8 @@ make test-db-down
 | `cmd/cue-vision` | точка входа |
 | `internal/event` | разбор потока: общие поля, типы, отпечаток события |
 | `internal/ingest` | события → сессии, удары, падения; оценка исхода удара |
-| `internal/store` | PostgreSQL: миграции, тренировки, игроки, статистика |
+| `internal/store` | PostgreSQL: миграции, тренировки, игроки, пользователи, статистика |
+| `internal/auth` | пароли, токены сессий, ограничение попыток входа |
 | `internal/detector` | WebSocket-клиент детектора и обратный канал команд |
 | `internal/api` | HTTP |
 | `web/` | фронтенды: `apps/training` — тренировки (Vue + Vite), см. `web/README.md` |

@@ -1,4 +1,5 @@
-export { ApiError } from './http'
+export { ApiError, setUnauthorizedHandler } from './http'
+export { authApi, usersApi } from './auth'
 export { playersApi } from './players'
 export { trainingsApi, type TrainingFilter } from './trainings'
 export type * from './types'

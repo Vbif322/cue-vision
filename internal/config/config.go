@@ -21,15 +21,20 @@ type Detector struct {
 
 // Config — настройки сервиса.
 type Config struct {
-	HTTPAddr     string
-	DatabaseURL  string
-	APIToken     string
-	LogLevel     slog.Level
-	Detectors    []Detector
-	AutoTraining bool
-	SkipTypes    map[string]bool
-	MaxBodyBytes int64
-	IdleTimeout  time.Duration
+	HTTPAddr    string
+	DatabaseURL string
+	APIToken    string
+	// AdminLogin и AdminPassword заводят первого администратора, пока пользователей нет.
+	AdminLogin    string
+	AdminPassword string
+	SessionTTL    time.Duration
+	CookieSecure  bool
+	LogLevel      slog.Level
+	Detectors     []Detector
+	AutoTraining  bool
+	SkipTypes     map[string]bool
+	MaxBodyBytes  int64
+	IdleTimeout   time.Duration
 }
 
 var streamRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -46,7 +51,10 @@ func Load() (Config, error) {
 		HTTPAddr:    env("HTTP_ADDR", ":8080"),
 		DatabaseURL: env("DATABASE_URL", "postgres://cuevision:cuevision@localhost:5432/cuevision?sslmode=disable"),
 		APIToken:    os.Getenv("API_TOKEN"),
-		SkipTypes:   map[string]bool{},
+		AdminLogin:  strings.TrimSpace(os.Getenv("ADMIN_LOGIN")),
+		// Пароль не обрезается: пробелы по краям — его часть.
+		AdminPassword: os.Getenv("ADMIN_PASSWORD"),
+		SkipTypes:     map[string]bool{},
 	}
 
 	if err := cfg.LogLevel.UnmarshalText([]byte(env("LOG_LEVEL", "info"))); err != nil {
@@ -62,6 +70,16 @@ func Load() (Config, error) {
 	}
 	if cfg.IdleTimeout, err = time.ParseDuration(env("DETECTOR_IDLE_TIMEOUT", "60s")); err != nil || cfg.IdleTimeout <= 0 {
 		return Config{}, fmt.Errorf("DETECTOR_IDLE_TIMEOUT: ожидается длительность вроде 60s")
+	}
+
+	if cfg.SessionTTL, err = time.ParseDuration(env("SESSION_TTL", "720h")); err != nil || cfg.SessionTTL < time.Minute {
+		return Config{}, fmt.Errorf("SESSION_TTL: ожидается длительность не меньше минуты, например 720h")
+	}
+	if cfg.CookieSecure, err = strconv.ParseBool(env("COOKIE_SECURE", "false")); err != nil {
+		return Config{}, fmt.Errorf("COOKIE_SECURE: %w", err)
+	}
+	if (cfg.AdminLogin == "") != (cfg.AdminPassword == "") {
+		return Config{}, fmt.Errorf("ADMIN_LOGIN и ADMIN_PASSWORD задаются вместе")
 	}
 
 	for _, t := range splitList(env("SKIP_EVENT_TYPES", "positions")) {
